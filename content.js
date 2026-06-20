@@ -2,7 +2,7 @@ const EXPIRATION_TIME_MS = 15 * 60 * 1000;
 const PAGE_URL = window.location.href;
 
 function initTrailheadTracker() {
-    const steps = document.querySelectorAll('main ol li, .challenge-instructions ol li, .step-instructions ol li');
+    const steps = document.querySelectorAll('main ol li ul li, .challenge-instructions ol li ul li, .step-instructions ol li ul li');
     if (steps.length === 0) return;
 
     chrome.storage.local.get([PAGE_URL], (result) => {
