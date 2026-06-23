@@ -2,7 +2,10 @@ const EXPIRATION_TIME_MS = 15 * 60 * 1000;
 const PAGE_URL = window.location.href;
 
 function initTrailheadTracker() {
-    const steps = document.querySelectorAll('main ol li ul li, .challenge-instructions ol li ul li, .step-instructions ol li ul li');
+    const steps = document.querySelectorAll(
+        '.unit-content ol li, .unit-content ul li, ' +
+        '.th-challenge__requirements-content ol li, .th-challenge__requirements-content ul li'
+    );
     if (steps.length === 0) return;
 
     chrome.storage.local.get([PAGE_URL], (result) => {
@@ -36,9 +39,22 @@ function initTrailheadTracker() {
             textWrapper.style.display = 'inline';
             textWrapper.style.verticalAlign = 'middle';
             textWrapper.style.cursor = 'pointer';
+            
+            const nodesToWrap = [];
+            for (let child of step.childNodes) {
+                if (child.nodeName === 'UL' || child.nodeName === 'OL') {
+                    break;
+                }
+                nodesToWrap.push(child);
+            }
 
-            while (step.firstChild) {
-                textWrapper.appendChild(step.firstChild);
+            if (nodesToWrap.length > 0) {
+                step.insertBefore(textWrapper, nodesToWrap[0]);
+                nodesToWrap.forEach(node => {
+                    textWrapper.appendChild(node);
+                });
+            } else {
+                if (step.firstChild) step.insertBefore(textWrapper, step.firstChild);
             }
 
             function setElementStyle(wrapper, isChecked) {
@@ -81,21 +97,46 @@ function initTrailheadTracker() {
                 const parentList = clickedStep.closest('ol, ul');
                 if (!parentList) return;
 
-                const listItems = Array.from(parentList.querySelectorAll('li'));
+                const listItems = Array.from(parentList.children).filter(el => el.tagName === 'LI');
                 const currentIndex = listItems.indexOf(clickedStep);
 
                 for (let i = 0; i <= currentIndex; i++) {
                     const currentItem = listItems[i];
-                    const currentBox = currentItem.querySelector('.th-tracker-checkbox');
-                    const currentText = currentItem.querySelector('.th-tracker-text');
+                    const currentBox = currentItem.querySelector(':scope > .th-tracker-checkbox');
+                    const currentText = currentItem.querySelector(':scope > .th-tracker-text');
 
                     if (currentBox && currentText) {
                         currentBox.checked = targetState;
                         setElementStyle(currentText, targetState);
                     }
                 }
-
                 saveCurrentProgress();
+            }
+
+            function updateParentListState(childStep) {
+                const parentList = childStep.parentElement.closest('ul, ol');
+                if (!parentList) return;
+
+                const parentListItem = parentList.closest('li');
+                if (!parentListItem) return;
+
+                const parentCheckbox = parentListItem.querySelector(':scope > .th-tracker-checkbox');
+                const parentText = parentListItem.querySelector(':scope > .th-tracker-text');
+
+                if (parentCheckbox && parentText) {
+                    const allSubBoxes = parentList.querySelectorAll('.th-tracker-checkbox');
+                    const checkedSubBoxes = parentList.querySelectorAll('.th-tracker-checkbox:checked');
+
+                    if (allSubBoxes.length === checkedSubBoxes.length) {
+                        parentCheckbox.checked = true;
+                        setElementStyle(parentText, true);
+                    } else {
+                        parentCheckbox.checked = false;
+                        setElementStyle(parentText, false);
+                    }
+                    saveCurrentProgress();
+                    updateParentListState(parentListItem);
+                }
             }
 
             textWrapper.addEventListener('click', (e) => {
@@ -109,24 +150,29 @@ function initTrailheadTracker() {
 
                 if (nextState === true) {
                     checkPreviousStepsInCurrentList(step, true);
+                    updateParentListState(step);
                 } else {
                     checkbox.checked = false;
                     setElementStyle(textWrapper, false);
-                    saveCurrentProgress(); // Оновлюємо кеш при знятті однієї галочки
+                    saveCurrentProgress();
+                    updateParentListState(step);
                 }
             });
 
             checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+
                 if (e.target.checked) {
                     checkPreviousStepsInCurrentList(step, true);
+                    updateParentListState(step);
                 } else {
                     setElementStyle(textWrapper, false);
                     saveCurrentProgress();
+                    updateParentListState(step);
                 }
             });
 
-            step.appendChild(checkbox);
-            step.appendChild(textWrapper);
+            step.insertBefore(checkbox, step.firstChild);
         });
     });
 }
